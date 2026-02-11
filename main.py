@@ -38,7 +38,7 @@ class DrawTask:
     "astrbot_plugin_mio_nai",
     "miofling",
     "Mio 的 NovelAI 绘图插件（基础/辅助/自动/队列）",
-    "0.2.4",
+    "0.2.5",
     "https://github.com/miofling/astrbot_plugin_mio_nai",
 )
 class MioNaiPlugin(Star):
@@ -330,6 +330,18 @@ class MioNaiPlugin(Star):
             yield event.plain_result(f"Opus 参数模式已{'开启' if self.state['opus_mode'] else '关闭'}。")
             return
 
+        if cmd in {"请求日志开", "reqlogon"}:
+            self.state["log_request_payload"] = True
+            self._save_runtime_state()
+            yield event.plain_result("请求 JSON 日志已开启。")
+            return
+
+        if cmd in {"请求日志关", "reqlogoff"}:
+            self.state["log_request_payload"] = False
+            self._save_runtime_state()
+            yield event.plain_result("请求 JSON 日志已关闭。")
+            return
+
         if cmd in {"请求日志", "reqlog"} and len(tokens) >= 2:
             val = tokens[1].lower()
             self.state["log_request_payload"] = val in {"开", "on", "1", "true"}
@@ -521,7 +533,7 @@ class MioNaiPlugin(Star):
                 f"{'自动' if task.is_auto else '完成'} | 模型: {self.state.get('nai_model')} | "
                 f"seed: {seed} | 耗时: {elapsed}s\nprompt: {positive}"
             )
-            chain = MessageChain().message(Plain(meta)).message(Image.fromFileSystem(str(image_path)))
+            chain = MessageChain().message(meta).message(Image.fromFileSystem(str(image_path)))
         else:
             chain = MessageChain().message(Image.fromFileSystem(str(image_path)))
         await self._send_chain(task.origin, chain)
@@ -1021,7 +1033,7 @@ class MioNaiPlugin(Star):
     async def _send_plain(self, origin: Any, text: str) -> None:
         if origin is None:
             return
-        chain = MessageChain().message(Plain(text))
+        chain = MessageChain().message(str(text))
         await self._send_chain(origin, chain)
 
     async def _send_chain(self, origin: Any, chain: MessageChain) -> None:
