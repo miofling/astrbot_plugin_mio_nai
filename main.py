@@ -14,7 +14,7 @@ from typing import Any, Deque, Dict, List, Optional, Set, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from astrbot.api import EventMessageType, logger
+from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.message_components import Image, Plain
 from astrbot.api.star import Context, Star, register
@@ -396,7 +396,7 @@ class MioNaiPlugin(Star):
 
         yield event.plain_result("未知子命令。输入 /画图管理 帮助 查看可用命令。")
 
-    @filter.event_message_type(EventMessageType.ALL)
+    @filter.event_message_type(filter.EventMessageType.ALL)
     async def on_all_messages(self, event: AstrMessageEvent):
         self._ensure_background_tasks()
         raw_text = str(getattr(event, "message_str", "") or "").strip()
