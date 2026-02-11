@@ -153,8 +153,14 @@
         "type": "bool",
         "default": true
       },
+      "llm_provider_id": {
+        "_special": "select_provider",
+        "description": "用于将自然语言转为 tags 的模型（从 AstrBot 已接入模型中选择）",
+        "type": "string",
+        "default": ""
+      },
       "llm_api_url": {
-        "description": "LLM 中转 URL（OpenAI 兼容）",
+        "description": "外部 LLM 中转 URL（可选兜底，OpenAI 兼容）",
         "type": "string",
         "default": ""
       },

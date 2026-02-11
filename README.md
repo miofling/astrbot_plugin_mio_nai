@@ -37,7 +37,11 @@
 - `nai_api_url`（默认已填：`https://ai.mio-ai.cyou/ai/generate-image`）
 - `nai_api_key`
 
-如需“辅助画图/自动画图”的自然语言优化，请再填写：
+如需“辅助画图/自动画图”的自然语言优化，优先推荐在配置页选择：
+
+- `llm_provider_id`（点击“选择提供商”，直接选 AstrBot 已接入模型）
+
+可选兜底（仅在 provider 不可用时使用）：
 
 - `llm_api_url`
 - `llm_api_key`
@@ -65,6 +69,7 @@
 - `/画图管理 回显 开|关`
 - `/画图管理 opus 开|关`
 - `/画图管理 llm开 | llm关`
+- `/画图管理 llmprovider <provider_id>`
 - `/画图管理 llmurl <url>`
 - `/画图管理 llmkey <key>`
 - `/画图管理 llmmodel <model>`

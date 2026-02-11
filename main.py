@@ -18,6 +18,7 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.message_components import Image, Plain
 from astrbot.api.star import Context, Star, register
+from astrbot.core.agent.message import Message
 from astrbot.core.message.message_event_result import MessageChain
 
 
@@ -37,7 +38,7 @@ class DrawTask:
     "astrbot_plugin_mio_nai",
     "miofling",
     "Mio 的 NovelAI 绘图插件（基础/辅助/自动/队列）",
-    "0.2.0",
+    "0.2.1",
     "https://github.com/miofling/astrbot_plugin_mio_nai",
 )
 class MioNaiPlugin(Star):
@@ -100,6 +101,7 @@ class MioNaiPlugin(Star):
             "auto_random_prompts": [],
             "auto_queue_limit": 3,
             "llm_enable": True,
+            "llm_provider_id": "",
             "llm_api_url": "",
             "llm_api_key": "",
             "llm_model": "",
@@ -334,6 +336,16 @@ class MioNaiPlugin(Star):
             yield event.plain_result("LLM 优化已关闭。")
             return
 
+        if cmd in {"llmprovider"}:
+            value = text[len(tokens[0]) :].strip()
+            self.state["llm_provider_id"] = value
+            self._save_runtime_state()
+            if value:
+                yield event.plain_result(f"LLM Provider 已更新: {value}")
+            else:
+                yield event.plain_result("LLM Provider 已清空，将自动跟随当前会话模型。")
+            return
+
         if cmd in {"llmurl"}:
             value = text[len(tokens[0]) :].strip()
             if not value:
@@ -468,7 +480,11 @@ class MioNaiPlugin(Star):
 
         prompt_core = task.description.strip()
         if task.use_llm:
-            prompt_core = await self._optimize_prompt_with_llm(task.description, task.group_id)
+            prompt_core = await self._optimize_prompt_with_llm(
+                task.description,
+                task.group_id,
+                task.origin,
+            )
 
         positive = self._join_tags(
             [
@@ -553,9 +569,22 @@ class MioNaiPlugin(Star):
         }
         return payload, seed
 
-    async def _optimize_prompt_with_llm(self, description: str, group_id: str) -> str:
+    async def _optimize_prompt_with_llm(
+        self,
+        description: str,
+        group_id: str,
+        origin: Any = None,
+    ) -> str:
         if not self._to_bool(self.state.get("llm_enable", False)):
             return description
+
+        tags_by_provider = await self._optimize_prompt_with_astrbot_provider(
+            description=description,
+            group_id=group_id,
+            origin=origin,
+        )
+        if tags_by_provider:
+            return tags_by_provider
 
         url = str(self.state.get("llm_api_url", "")).strip()
         if not url:
@@ -608,6 +637,58 @@ class MioNaiPlugin(Star):
         except Exception as exc:
             logger.warning(f"[mio_nai] LLM 优化失败，回退原描述: {exc}")
             return description
+
+    async def _optimize_prompt_with_astrbot_provider(
+        self,
+        description: str,
+        group_id: str,
+        origin: Any = None,
+    ) -> str:
+        provider_id = str(self.state.get("llm_provider_id", "")).strip()
+        if not provider_id and origin is not None:
+            get_provider = getattr(self.context, "get_current_chat_provider_id", None)
+            if callable(get_provider):
+                try:
+                    provider_id = await get_provider(origin)
+                except Exception as exc:
+                    logger.debug(f"[mio_nai] 无法获取当前聊天 provider，回退外部 LLM: {exc}")
+
+        if not provider_id:
+            return ""
+
+        llm_generate = getattr(self.context, "llm_generate", None)
+        if not callable(llm_generate):
+            logger.warning("[mio_nai] 当前 AstrBot 版本不支持 context.llm_generate")
+            return ""
+
+        system_prompt = str(self.state.get("llm_system_prompt", "")).strip()
+        if group_id and group_id in self.group_context_buffers:
+            context_text = " | ".join(list(self.group_context_buffers[group_id])[-8:])
+            user_content = (
+                f"User request/context:\n{description}\n\n"
+                f"Recent group context:\n{context_text}\n\n"
+                "Return only concise English tags."
+            )
+        else:
+            user_content = f"User request:\n{description}\n\nReturn only concise English tags."
+
+        try:
+            contexts = [
+                Message(role="system", content=system_prompt),
+                Message(role="user", content=user_content),
+            ]
+            llm_resp = await llm_generate(
+                chat_provider_id=provider_id,
+                contexts=contexts,
+            )
+            raw_text = str(getattr(llm_resp, "completion_text", "") or "").strip()
+            if not raw_text:
+                raw_text = str(getattr(llm_resp, "text", "") or "").strip()
+            tags = self._sanitize_tags(raw_text)
+            return tags
+        except Exception as exc:
+            logger.warning(f"[mio_nai] AstrBot Provider LLM 调用失败，回退外部 LLM: {exc}")
+            return ""
 
     async def _auto_scheduler_loop(self):
         while True:
@@ -1022,6 +1103,7 @@ class MioNaiPlugin(Star):
             f"({self.state.get('auto_mode')})\n"
             f"- 自动间隔: {self.state.get('auto_min_minutes')}~{self.state.get('auto_max_minutes')} 分钟\n"
             f"- LLM 优化: {'开启' if self._to_bool(self.state.get('llm_enable')) else '关闭'}\n"
+            f"- LLM Provider: {self.state.get('llm_provider_id') or '跟随当前会话'}\n"
             f"- 白名单群: {', '.join(whitelist) if whitelist else '未限制'}\n"
             f"- 回显: {'开' if self._to_bool(self.state.get('echo_meta')) else '关'}"
         )
@@ -1044,6 +1126,7 @@ class MioNaiPlugin(Star):
             "/画图管理 key <nai_api_key>\n"
             "/画图管理 model <nai_model>\n"
             "/画图管理 llm开 | llm关\n"
+            "/画图管理 llmprovider <provider_id>\n"
             "/画图管理 llmurl <url>\n"
             "/画图管理 llmkey <key>\n"
             "/画图管理 llmmodel <model>"
