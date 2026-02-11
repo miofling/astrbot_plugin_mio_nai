@@ -16,7 +16,6 @@ from urllib.request import Request, urlopen
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
-from astrbot.api.message_components import Image, Plain
 from astrbot.api.star import Context, Star, register
 from astrbot.core.agent.message import Message
 from astrbot.core.message.message_event_result import MessageChain
@@ -38,7 +37,7 @@ class DrawTask:
     "astrbot_plugin_mio_nai",
     "miofling",
     "Mio 的 NovelAI 绘图插件（基础/辅助/自动/队列）",
-    "0.2.6",
+    "0.2.7",
     "https://github.com/miofling/astrbot_plugin_mio_nai",
 )
 class MioNaiPlugin(Star):
@@ -119,12 +118,6 @@ class MioNaiPlugin(Star):
             ),
         }
 
-        collected_config: Dict[str, Any] = {}
-        self._collect_config_values(self.config, set(state.keys()), collected_config)
-        for key, value in collected_config.items():
-            if value is not None:
-                state[key] = value
-
         if self.state_path.exists():
             try:
                 disk_state = json.loads(self.state_path.read_text(encoding="utf-8"))
@@ -132,6 +125,13 @@ class MioNaiPlugin(Star):
                     state.update(disk_state)
             except Exception as exc:
                 logger.warning(f"[mio_nai] runtime_state.json 读取失败，将使用当前配置: {exc}")
+
+        # 配置文件优先级高于运行时状态，避免 UI 改配置后被 runtime_state 覆盖。
+        collected_config: Dict[str, Any] = {}
+        self._collect_config_values(self.config, set(state.keys()), collected_config)
+        for key, value in collected_config.items():
+            if value is not None:
+                state[key] = value
 
         for key in (
             "bot_names",
@@ -446,7 +446,7 @@ class MioNaiPlugin(Star):
         if group_id:
             self._remember_group_context(group_id, raw_text, getattr(event, "unified_msg_origin", None))
 
-        if raw_text.startswith("/"):
+        if self._looks_like_command_message(raw_text):
             return
 
         if self._should_assist_draw(event, raw_text):
@@ -464,6 +464,22 @@ class MioNaiPlugin(Star):
             )
             if self._to_bool(self.state.get("send_processing_text", True)):
                 yield event.plain_result(self._queue_tip("辅助画图", pending))
+
+    def _looks_like_command_message(self, text: str) -> bool:
+        cleaned = text.strip()
+        # 去掉消息前缀中的 CQ 段（如 reply/at），再判断是否是斜杠命令。
+        for _ in range(3):
+            new_cleaned = re.sub(r"^\[CQ:[^\]]+\]\s*", "", cleaned, flags=re.IGNORECASE)
+            if new_cleaned == cleaned:
+                break
+            cleaned = new_cleaned
+        cleaned = cleaned.lstrip()
+        if cleaned.startswith(("/", "／")):
+            return True
+        # 兜底：消息中出现本插件命令前缀也视为命令，避免误触发辅助画图。
+        if re.search(r"[/／](?:画图|辅助画图|画图状态|画图管理)\b", cleaned):
+            return True
+        return False
 
     async def _enqueue_task(
         self,
@@ -540,9 +556,9 @@ class MioNaiPlugin(Star):
                 f"{'自动' if task.is_auto else '完成'} | 模型: {self.state.get('nai_model')} | "
                 f"seed: {seed} | 耗时: {elapsed}s\nprompt: {positive}"
             )
-            chain = MessageChain().message(meta).message(Image.fromFileSystem(str(image_path)))
+            chain = MessageChain().message(str(meta)).file_image(str(image_path))
         else:
-            chain = MessageChain().message(Image.fromFileSystem(str(image_path)))
+            chain = MessageChain().file_image(str(image_path))
         await self._send_chain(task.origin, chain)
 
     async def _call_nai(self, payload: Dict[str, Any]) -> Tuple[bytes, str]:
