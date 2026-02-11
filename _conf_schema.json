@@ -1,212 +1,224 @@
-[
-  {
-    "field_name": "nai_api_url",
-    "type": "string",
-    "description": "NovelAI 中转 API 地址",
-    "default": "https://ai.mio-ai.cyou/ai/generate-image"
+{
+  "general_settings": {
+    "description": "通用设置",
+    "type": "object",
+    "items": {
+      "enable_assist": {
+        "description": "启用自然语言辅助触发（提到 mio 且包含画图意图）",
+        "type": "bool",
+        "default": true
+      },
+      "send_processing_text": {
+        "description": "接收请求后先发送排队提示",
+        "type": "bool",
+        "default": true
+      },
+      "echo_meta": {
+        "description": "回图时附带 seed、耗时与最终 prompt",
+        "type": "bool",
+        "default": true
+      },
+      "opus_mode": {
+        "description": "启用 Opus 参数兼容模式",
+        "type": "bool",
+        "default": true
+      },
+      "bot_names": {
+        "description": "机器人唤醒名列表",
+        "type": "list",
+        "default": [
+          "mio",
+          "米欧"
+        ]
+      },
+      "draw_keywords": {
+        "description": "判定为画图请求的关键词列表",
+        "type": "list",
+        "default": [
+          "画",
+          "画图",
+          "生图",
+          "绘图",
+          "生成",
+          "来一张",
+          "来张"
+        ]
+      }
+    }
   },
-  {
-    "field_name": "nai_api_key",
-    "type": "string",
-    "description": "NovelAI API Key（Bearer）",
-    "default": ""
+  "request_settings": {
+    "description": "请求设置",
+    "type": "object",
+    "items": {
+      "nai_api_url": {
+        "description": "NovelAI 中转 API 地址",
+        "type": "string",
+        "default": "https://ai.mio-ai.cyou/ai/generate-image"
+      },
+      "nai_api_key": {
+        "description": "NovelAI API Key（Bearer）",
+        "type": "string",
+        "default": ""
+      },
+      "worker_token": {
+        "description": "可选：Worker 额外校验头 X-Worker-Token",
+        "type": "string",
+        "default": ""
+      },
+      "nai_model": {
+        "description": "默认模型",
+        "type": "string",
+        "default": "nai-diffusion-4-5-full"
+      },
+      "width": {
+        "description": "出图宽度",
+        "type": "int",
+        "default": 832
+      },
+      "height": {
+        "description": "出图高度",
+        "type": "int",
+        "default": 1216
+      },
+      "steps": {
+        "description": "采样步数",
+        "type": "int",
+        "default": 28
+      },
+      "scale": {
+        "description": "CFG Scale",
+        "type": "float",
+        "default": 6.0
+      },
+      "sampler": {
+        "description": "采样器",
+        "type": "string",
+        "default": "k_euler_ancestral"
+      },
+      "seed": {
+        "description": "随机种子（-1 表示每次随机）",
+        "type": "int",
+        "default": -1
+      },
+      "timeout_sec": {
+        "description": "绘图请求超时秒数",
+        "type": "int",
+        "default": 120
+      }
+    }
   },
-  {
-    "field_name": "nai_model",
-    "type": "string",
-    "description": "默认模型",
-    "default": "nai-diffusion-4-5-full"
+  "prompt_settings": {
+    "description": "提示词设置",
+    "type": "object",
+    "items": {
+      "default_positive_tags": {
+        "description": "默认正面 tags",
+        "type": "text",
+        "default": "best quality, very aesthetic, absurdres"
+      },
+      "append_positive_tags": {
+        "description": "每次自动追加的正面 tags",
+        "type": "text",
+        "default": "best quality, 8k"
+      },
+      "default_negative_tags": {
+        "description": "默认负面 tags",
+        "type": "text",
+        "default": "lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry"
+      }
+    }
   },
-  {
-    "field_name": "worker_token",
-    "type": "string",
-    "description": "可选: 你的 Worker 额外校验头 X-Worker-Token",
-    "default": ""
+  "permission_settings": {
+    "description": "权限与白名单",
+    "type": "object",
+    "items": {
+      "whitelist_group_ids": {
+        "description": "允许画图的群号白名单（空列表表示不限制）",
+        "type": "list",
+        "default": []
+      },
+      "admin_user_ids": {
+        "description": "额外管理员 QQ 列表（可改配置）",
+        "type": "list",
+        "default": []
+      }
+    }
   },
-  {
-    "field_name": "default_positive_tags",
-    "type": "string",
-    "description": "默认正面 tags",
-    "default": "best quality, very aesthetic, absurdres"
+  "llm_settings": {
+    "description": "LLM 优化设置",
+    "type": "object",
+    "items": {
+      "llm_enable": {
+        "description": "开启后先用 LLM 把自然语言转为 tags",
+        "type": "bool",
+        "default": true
+      },
+      "llm_api_url": {
+        "description": "LLM 中转 URL（OpenAI 兼容）",
+        "type": "string",
+        "default": ""
+      },
+      "llm_api_key": {
+        "description": "LLM Key（Bearer）",
+        "type": "string",
+        "default": ""
+      },
+      "llm_model": {
+        "description": "LLM 模型名",
+        "type": "string",
+        "default": ""
+      },
+      "llm_timeout_sec": {
+        "description": "LLM 请求超时秒数",
+        "type": "int",
+        "default": 60
+      },
+      "llm_system_prompt": {
+        "description": "LLM 的系统提示词（要求只输出逗号分隔 tags）",
+        "type": "text",
+        "default": "You are a prompt engineer for NovelAI anime image generation. Convert user request or chat context into concise English booru-style tags. Output ONLY comma-separated tags, no explanations, no markdown."
+      }
+    }
   },
-  {
-    "field_name": "append_positive_tags",
-    "type": "string",
-    "description": "每次自动追加的正面 tags",
-    "default": "best quality, 8k"
-  },
-  {
-    "field_name": "default_negative_tags",
-    "type": "string",
-    "description": "默认负面 tags",
-    "default": "lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry"
-  },
-  {
-    "field_name": "width",
-    "type": "int",
-    "description": "宽度",
-    "default": 832
-  },
-  {
-    "field_name": "height",
-    "type": "int",
-    "description": "高度",
-    "default": 1216
-  },
-  {
-    "field_name": "steps",
-    "type": "int",
-    "description": "采样步数",
-    "default": 28
-  },
-  {
-    "field_name": "scale",
-    "type": "float",
-    "description": "CFG Scale",
-    "default": 6.0
-  },
-  {
-    "field_name": "sampler",
-    "type": "string",
-    "description": "采样器",
-    "default": "k_euler_ancestral"
-  },
-  {
-    "field_name": "seed",
-    "type": "int",
-    "description": "随机种子，-1 为随机",
-    "default": -1
-  },
-  {
-    "field_name": "timeout_sec",
-    "type": "int",
-    "description": "NAI 请求超时秒数",
-    "default": 120
-  },
-  {
-    "field_name": "opus_mode",
-    "type": "bool",
-    "description": "启用 Opus 参数模式",
-    "default": true
-  },
-  {
-    "field_name": "echo_meta",
-    "type": "bool",
-    "description": "回图时附带 prompt/seed/耗时",
-    "default": true
-  },
-  {
-    "field_name": "send_processing_text",
-    "type": "bool",
-    "description": "触发后先回复排队提示",
-    "default": true
-  },
-  {
-    "field_name": "enable_assist",
-    "type": "bool",
-    "description": "启用自然语言辅助触发",
-    "default": true
-  },
-  {
-    "field_name": "bot_names",
-    "type": "string",
-    "description": "唤醒名（逗号分隔）",
-    "default": "mio,米欧"
-  },
-  {
-    "field_name": "draw_keywords",
-    "type": "string",
-    "description": "触发关键词（逗号分隔）",
-    "default": "画,画图,生图,绘图,生成,来一张,来张"
-  },
-  {
-    "field_name": "whitelist_group_ids",
-    "type": "string",
-    "description": "群白名单（逗号分隔，留空则不限制）",
-    "default": ""
-  },
-  {
-    "field_name": "admin_user_ids",
-    "type": "string",
-    "description": "额外管理员 QQ（逗号分隔）",
-    "default": ""
-  },
-  {
-    "field_name": "auto_enabled",
-    "type": "bool",
-    "description": "自动画图开关",
-    "default": false
-  },
-  {
-    "field_name": "auto_mode",
-    "type": "string",
-    "description": "自动模式: context 或 random",
-    "default": "context"
-  },
-  {
-    "field_name": "auto_min_minutes",
-    "type": "int",
-    "description": "自动最小间隔（分钟）",
-    "default": 30
-  },
-  {
-    "field_name": "auto_max_minutes",
-    "type": "int",
-    "description": "自动最大间隔（分钟）",
-    "default": 90
-  },
-  {
-    "field_name": "auto_context_window",
-    "type": "int",
-    "description": "上下文取样消息数",
-    "default": 20
-  },
-  {
-    "field_name": "auto_random_prompts",
-    "type": "string",
-    "description": "随机模式提示词池（逗号分隔）",
-    "default": ""
-  },
-  {
-    "field_name": "auto_queue_limit",
-    "type": "int",
-    "description": "自动任务入队上限（超限则延后）",
-    "default": 3
-  },
-  {
-    "field_name": "llm_enable",
-    "type": "bool",
-    "description": "是否启用 LLM 优化",
-    "default": true
-  },
-  {
-    "field_name": "llm_api_url",
-    "type": "string",
-    "description": "LLM 中转 URL（OpenAI 兼容）",
-    "default": ""
-  },
-  {
-    "field_name": "llm_api_key",
-    "type": "string",
-    "description": "LLM Key（Bearer）",
-    "default": ""
-  },
-  {
-    "field_name": "llm_model",
-    "type": "string",
-    "description": "LLM 模型名",
-    "default": ""
-  },
-  {
-    "field_name": "llm_timeout_sec",
-    "type": "int",
-    "description": "LLM 请求超时秒数",
-    "default": 60
-  },
-  {
-    "field_name": "llm_system_prompt",
-    "type": "string",
-    "description": "LLM system prompt（输出逗号分隔 tags）",
-    "default": "You are a prompt engineer for NovelAI anime image generation. Convert user request or chat context into concise English booru-style tags. Output ONLY comma-separated tags, no explanations, no markdown."
+  "auto_draw_settings": {
+    "description": "自动画图设置",
+    "type": "object",
+    "items": {
+      "auto_enabled": {
+        "description": "启用自动画图",
+        "type": "bool",
+        "default": false
+      },
+      "auto_mode": {
+        "description": "自动模式：context（上下文）或 random（随机池）",
+        "type": "string",
+        "default": "context"
+      },
+      "auto_min_minutes": {
+        "description": "最小触发间隔（分钟）",
+        "type": "int",
+        "default": 30
+      },
+      "auto_max_minutes": {
+        "description": "最大触发间隔（分钟）",
+        "type": "int",
+        "default": 90
+      },
+      "auto_context_window": {
+        "description": "上下文模式取样消息条数",
+        "type": "int",
+        "default": 20
+      },
+      "auto_queue_limit": {
+        "description": "自动任务入队上限（超限则顺延）",
+        "type": "int",
+        "default": 3
+      },
+      "auto_random_prompts": {
+        "description": "随机模式提示词池（留空表示暂不启用）",
+        "type": "list",
+        "default": []
+      }
+    }
   }
-]
+}

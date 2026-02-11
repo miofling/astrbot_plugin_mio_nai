@@ -10,7 +10,7 @@ import zipfile
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Deque, Dict, List, Optional, Tuple
+from typing import Any, Deque, Dict, List, Optional, Set, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -37,7 +37,7 @@ class DrawTask:
     "astrbot_plugin_mio_nai",
     "miofling",
     "Mio 的 NovelAI 绘图插件（基础/辅助/自动/队列）",
-    "0.1.1",
+    "0.2.0",
     "https://github.com/miofling/astrbot_plugin_mio_nai",
 )
 class MioNaiPlugin(Star):
@@ -111,9 +111,11 @@ class MioNaiPlugin(Star):
             ),
         }
 
-        for key in list(state.keys()):
-            if key in self.config and self.config[key] is not None:
-                state[key] = self.config[key]
+        collected_config: Dict[str, Any] = {}
+        self._collect_config_values(self.config, set(state.keys()), collected_config)
+        for key, value in collected_config.items():
+            if value is not None:
+                state[key] = value
 
         if self.state_path.exists():
             try:
@@ -1056,3 +1058,14 @@ class MioNaiPlugin(Star):
             items = re.split(r"[,，\n\r]+", value)
             return [x.strip() for x in items if x.strip()]
         return []
+
+    def _collect_config_values(
+        self, node: Any, valid_keys: Set[str], out: Dict[str, Any]
+    ) -> None:
+        if not isinstance(node, dict):
+            return
+        for key, value in node.items():
+            if key in valid_keys and not isinstance(value, dict):
+                out[key] = value
+            if isinstance(value, dict):
+                self._collect_config_values(value, valid_keys, out)

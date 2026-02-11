@@ -1,39 +1,58 @@
-﻿# astrbot_plugin_mio_nai
+# astrbot_plugin_mio_nai
 
-A lightweight NovelAI drawing plugin for AstrBot.
+这是一个面向 AstrBot 的 NovelAI 轻量绘图插件，支持：
 
-Features:
-- Basic draw command: `/画图 <description>`
-- Assist draw command: `/辅助画图 <description>`
-- Natural language trigger: mention `mio` + drawing intent
-- Auto draw scheduler (context mode / random mode scaffold)
-- Global queue (concurrency = 1)
+- 基础画图：`/画图 <描述>`
+- 辅助画图：`/辅助画图 <自然语言描述>`
+- 自然语言触发：在群里提到 `mio` 并表达“画图/生图”意图即可触发
+- 自动画图：可按间隔基于群聊上下文自动出图
+- 全局队列：并发固定为 1，避免接口瞬时高并发
 
-## Install
+## 1. 你关心的“管理页面”
 
-1. Put this folder into AstrBot plugin path, e.g. `data/plugins/astrbot_plugin_mio_nai`.
-2. Restart AstrBot.
-3. Configure required fields in plugin config.
+可以做到。
 
-## Required config
+本插件已经改成 AstrBot WebUI 可识别的分组配置结构，导入后会出现类似你截图的配置弹窗，包含：
 
-- `nai_api_url` (default: `https://ai.mio-ai.cyou/ai/generate-image`)
+- 通用设置
+- 请求设置
+- 提示词设置
+- 权限与白名单
+- LLM 优化设置
+- 自动画图设置
+
+对应文件：`_conf_schema.json`
+
+## 2. 安装方式（Git 仓库）
+
+1. 打开 AstrBot 插件页面，选择“从 Git 仓库安装”。
+2. 填入仓库地址：`https://github.com/miofling/astrbot_plugin_mio_nai`
+3. 安装完成后进入插件配置页，填写必要参数并保存。
+4. 重启 AstrBot（建议）。
+
+## 3. 必填配置
+
+至少填写：
+
+- `nai_api_url`（默认已填：`https://ai.mio-ai.cyou/ai/generate-image`）
 - `nai_api_key`
 
-Optional but recommended:
+如需“辅助画图/自动画图”的自然语言优化，请再填写：
+
 - `llm_api_url`
 - `llm_api_key`
 - `llm_model`
-- `whitelist_group_ids`
 
-## Commands
+## 4. 常用命令
 
-User commands:
-- `/画图 二次元猫娘，海边沙滩椅`
-- `/辅助画图 mio 帮我画一个夜景少女`
+普通用户：
+
+- `/画图 二次元猫娘，坐在海边沙滩椅上`
+- `/辅助画图 帮我画一张夜景少女`
 - `/画图状态`
 
-Admin commands:
+管理员：
+
 - `/画图管理 帮助`
 - `/画图管理 查看`
 - `/画图管理 白名单 添加 <群号>`
@@ -50,13 +69,13 @@ Admin commands:
 - `/画图管理 llmkey <key>`
 - `/画图管理 llmmodel <model>`
 
-## Notes
+## 5. 说明
 
-- If `whitelist_group_ids` is empty, all groups are allowed.
-- Auto draw is disabled by default.
-- Default model: `nai-diffusion-4-5-full`.
-- Response parsing supports zip/image/json(base64).
+- `whitelist_group_ids` 为空时表示不限制群。
+- 自动画图默认关闭。
+- 默认模型为 `nai-diffusion-4-5-full`。
+- 返回格式优先按 `application/zip` 解析，也兼容直出图片和 JSON(base64)。
 
-## Repo
+## 6. 仓库地址
 
 - https://github.com/miofling/astrbot_plugin_mio_nai
