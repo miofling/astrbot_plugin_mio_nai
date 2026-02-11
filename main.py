@@ -38,7 +38,7 @@ class DrawTask:
     "astrbot_plugin_mio_nai",
     "miofling",
     "Mio 的 NovelAI 绘图插件（基础/辅助/自动/队列）",
-    "0.2.3",
+    "0.2.4",
     "https://github.com/miofling/astrbot_plugin_mio_nai",
 )
 class MioNaiPlugin(Star):
@@ -540,6 +540,8 @@ class MioNaiPlugin(Star):
             "Content-Type": "application/json",
             "Accept": "*/*",
             "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+            "Origin": "https://novelai.net",
+            "Referer": "https://novelai.net",
             "User-Agent": str(self.state.get("http_user_agent", "")).strip()
             or (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -574,28 +576,59 @@ class MioNaiPlugin(Star):
     def _build_nai_payload(self, positive: str, negative: str) -> Tuple[Dict[str, Any], int]:
         configured_seed = int(self.state.get("seed", -1))
         seed = configured_seed if configured_seed >= 0 else random.randint(1, 2**31 - 1)
+        model = str(self.state.get("nai_model", "nai-diffusion-4-5-full"))
+
         params = {
             "params_version": 3,
             "width": int(self.state.get("width", 832)),
             "height": int(self.state.get("height", 1216)),
             "scale": float(self.state.get("scale", 6.0)),
             "sampler": str(self.state.get("sampler", "k_euler_ancestral")),
+            "noise_schedule": "karras",
             "steps": int(self.state.get("steps", 28)),
             "n_samples": 1,
             "seed": seed,
+            "cfg_rescale": 0.0,
             "ucPreset": 0,
-            "qualityToggle": True,
+            "qualityToggle": False,
             "dynamic_thresholding": False,
+            "controlnet_strength": 1,
+            "legacy": False,
+            "add_original_image": True,
+            "legacy_v3_extend": False,
+            "skip_cfg_above_sigma": None,
+            "use_coords": False,
+            "characterPrompts": [],
+            "reference_image_multiple": [],
+            "reference_information_extracted_multiple": [],
+            "reference_strength_multiple": [],
             "negative_prompt": negative,
         }
 
-        if self._to_bool(self.state.get("opus_mode", True)):
-            params["sm"] = False
-            params["sm_dyn"] = False
+        # 默认关闭 SMEA/DYN，避免中转或模型侧异常。
+        params["sm"] = False
+        params["sm_dyn"] = False
+
+        # v4 / v4.5 模型建议显式传 v4 prompt 结构。
+        if model.startswith("nai-diffusion-4"):
+            params["v4_prompt"] = {
+                "caption": {
+                    "base_caption": positive,
+                    "char_captions": [],
+                },
+                "use_coords": False,
+                "use_order": True,
+            }
+            params["v4_negative_prompt"] = {
+                "caption": {
+                    "base_caption": negative,
+                    "char_captions": [],
+                }
+            }
 
         payload = {
             "input": positive,
-            "model": str(self.state.get("nai_model", "nai-diffusion-4-5-full")),
+            "model": model,
             "action": "generate",
             "parameters": params,
         }
