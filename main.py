@@ -71,6 +71,11 @@ class MioNaiPlugin(Star):
             "nai_api_key": "",
             "nai_model": "nai-diffusion-4-5-full",
             "worker_token": "",
+            "http_user_agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/125.0.0.0 Safari/537.36"
+            ),
             "default_positive_tags": "best quality, very aesthetic, absurdres",
             "append_positive_tags": "best quality, 8k",
             "default_negative_tags": (
@@ -524,6 +529,13 @@ class MioNaiPlugin(Star):
             "Authorization": f"Bearer {key}",
             "Content-Type": "application/json",
             "Accept": "*/*",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+            "User-Agent": str(self.state.get("http_user_agent", "")).strip()
+            or (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/125.0.0.0 Safari/537.36"
+            ),
         }
         worker_token = str(self.state.get("worker_token", "")).strip()
         if worker_token:
@@ -937,6 +949,18 @@ class MioNaiPlugin(Star):
         except HTTPError as exc:
             body = exc.read() if hasattr(exc, "read") else b""
             snippet = body[:200].decode("utf-8", errors="ignore")
+            headers = dict(exc.headers.items()) if getattr(exc, "headers", None) else {}
+            server = str(headers.get("Server", "")).lower()
+            cf_ray = str(headers.get("CF-RAY", "")).strip()
+            if exc.code == 403 and (
+                "cloudflare" in server or "<!doctype html" in snippet.lower()
+            ):
+                extra = f" CF-RAY={cf_ray}" if cf_ray else ""
+                raise RuntimeError(
+                    "HTTPError 403: 请求被 Cloudflare 拦截。"
+                    " 请在 Cloudflare 对 /ai/generate-image 放行规则"
+                    f"(跳过 WAF/Bot/Challenge)。{extra}"
+                )
             raise RuntimeError(f"HTTPError {exc.code}: {snippet}")
         except URLError as exc:
             raise RuntimeError(f"网络错误: {exc}")
