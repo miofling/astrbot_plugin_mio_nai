@@ -38,7 +38,7 @@ class DrawTask:
     "astrbot_plugin_mio_nai",
     "miofling",
     "Mio 的 NovelAI 绘图插件（基础/辅助/自动/队列）",
-    "0.2.1",
+    "0.2.3",
     "https://github.com/miofling/astrbot_plugin_mio_nai",
 )
 class MioNaiPlugin(Star):
@@ -90,6 +90,7 @@ class MioNaiPlugin(Star):
             "sampler": "k_euler_ancestral",
             "seed": -1,
             "timeout_sec": 120,
+            "log_request_payload": False,
             "opus_mode": True,
             "echo_meta": True,
             "send_processing_text": True,
@@ -329,6 +330,15 @@ class MioNaiPlugin(Star):
             yield event.plain_result(f"Opus 参数模式已{'开启' if self.state['opus_mode'] else '关闭'}。")
             return
 
+        if cmd in {"请求日志", "reqlog"} and len(tokens) >= 2:
+            val = tokens[1].lower()
+            self.state["log_request_payload"] = val in {"开", "on", "1", "true"}
+            self._save_runtime_state()
+            yield event.plain_result(
+                f"请求 JSON 日志已{'开启' if self.state['log_request_payload'] else '关闭'}。"
+            )
+            return
+
         if cmd in {"llm开", "llmon"}:
             self.state["llm_enable"] = True
             self._save_runtime_state()
@@ -540,6 +550,16 @@ class MioNaiPlugin(Star):
         worker_token = str(self.state.get("worker_token", "")).strip()
         if worker_token:
             headers["X-Worker-Token"] = worker_token
+
+        if self._to_bool(self.state.get("log_request_payload", False)):
+            try:
+                payload_for_log = self._payload_for_log(payload)
+                logger.info(
+                    "[mio_nai] NAI request payload: %s",
+                    json.dumps(payload_for_log, ensure_ascii=False),
+                )
+            except Exception:
+                pass
 
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         status, resp_headers, body = await asyncio.to_thread(
@@ -1021,6 +1041,25 @@ class MioNaiPlugin(Star):
                     tags.append(tag)
         return ", ".join(tags)
 
+    def _payload_for_log(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        result = dict(payload)
+        result["input"] = self._trim_text_for_log(str(result.get("input", "")), 500)
+        params = result.get("parameters")
+        if isinstance(params, dict):
+            params_copy = dict(params)
+            if "negative_prompt" in params_copy:
+                params_copy["negative_prompt"] = self._trim_text_for_log(
+                    str(params_copy.get("negative_prompt", "")),
+                    300,
+                )
+            result["parameters"] = params_copy
+        return result
+
+    def _trim_text_for_log(self, text: str, limit: int) -> str:
+        if len(text) <= limit:
+            return text
+        return text[:limit] + "...(truncated)"
+
     def _to_bool(self, value: Any) -> bool:
         if isinstance(value, bool):
             return value
@@ -1128,6 +1167,7 @@ class MioNaiPlugin(Star):
             f"- 自动间隔: {self.state.get('auto_min_minutes')}~{self.state.get('auto_max_minutes')} 分钟\n"
             f"- LLM 优化: {'开启' if self._to_bool(self.state.get('llm_enable')) else '关闭'}\n"
             f"- LLM Provider: {self.state.get('llm_provider_id') or '跟随当前会话'}\n"
+            f"- 请求日志: {'开' if self._to_bool(self.state.get('log_request_payload')) else '关'}\n"
             f"- 白名单群: {', '.join(whitelist) if whitelist else '未限制'}\n"
             f"- 回显: {'开' if self._to_bool(self.state.get('echo_meta')) else '关'}"
         )
@@ -1146,6 +1186,7 @@ class MioNaiPlugin(Star):
             "/画图管理 追加 <tags>\n"
             "/画图管理 回显 开|关\n"
             "/画图管理 opus 开|关\n"
+            "/画图管理 请求日志 开|关\n"
             "/画图管理 api <url>\n"
             "/画图管理 key <nai_api_key>\n"
             "/画图管理 model <nai_model>\n"

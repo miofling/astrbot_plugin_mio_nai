@@ -68,6 +68,7 @@
 - `/画图管理 负面 <tags>`
 - `/画图管理 回显 开|关`
 - `/画图管理 opus 开|关`
+- `/画图管理 请求日志 开|关`
 - `/画图管理 llm开 | llm关`
 - `/画图管理 llmprovider <provider_id>`
 - `/画图管理 llmurl <url>`
@@ -80,6 +81,7 @@
 - 自动画图默认关闭。
 - 默认模型为 `nai-diffusion-4-5-full`。
 - 返回格式优先按 `application/zip` 解析，也兼容直出图片和 JSON(base64)。
+- 如需查看发送给 NAI 的 JSON 请求体，可开启“请求日志”。
 
 ## 6. 仓库地址
 

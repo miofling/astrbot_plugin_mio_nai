@@ -109,6 +109,11 @@
         "description": "绘图请求超时秒数",
         "type": "int",
         "default": 120
+      },
+      "log_request_payload": {
+        "description": "输出 NAI 请求 JSON 到平台日志（调试用）",
+        "type": "bool",
+        "default": false
       }
     }
   },
