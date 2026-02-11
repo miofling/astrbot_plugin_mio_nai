@@ -38,7 +38,7 @@ class DrawTask:
     "astrbot_plugin_mio_nai",
     "miofling",
     "Mio 的 NovelAI 绘图插件（基础/辅助/自动/队列）",
-    "0.2.5",
+    "0.2.6",
     "https://github.com/miofling/astrbot_plugin_mio_nai",
 )
 class MioNaiPlugin(Star):
@@ -504,6 +504,12 @@ class MioNaiPlugin(Star):
 
     async def _process_draw_task(self, task: DrawTask):
         started_at = time.time()
+        logger.info(
+            "[mio_nai] start task source=%s auto=%s group=%s",
+            task.source,
+            task.is_auto,
+            task.group_id or "private",
+        )
 
         prompt_core = task.description.strip()
         if task.use_llm:
@@ -512,6 +518,7 @@ class MioNaiPlugin(Star):
                 task.group_id,
                 task.origin,
             )
+        logger.info("[mio_nai] prompt prepared, sending to NAI")
 
         positive = self._join_tags(
             [
@@ -754,15 +761,29 @@ class MioNaiPlugin(Star):
                 Message(role="system", content=system_prompt),
                 Message(role="user", content=user_content),
             ]
-            llm_resp = await llm_generate(
-                chat_provider_id=provider_id,
-                contexts=contexts,
+            timeout_sec = max(5, int(self.state.get("llm_timeout_sec", 60)))
+            logger.info(
+                "[mio_nai] calling AstrBot provider for tags, provider=%s timeout=%ss",
+                provider_id,
+                timeout_sec,
+            )
+            llm_resp = await asyncio.wait_for(
+                llm_generate(
+                    chat_provider_id=provider_id,
+                    contexts=contexts,
+                ),
+                timeout=timeout_sec,
             )
             raw_text = str(getattr(llm_resp, "completion_text", "") or "").strip()
             if not raw_text:
                 raw_text = str(getattr(llm_resp, "text", "") or "").strip()
             tags = self._sanitize_tags(raw_text)
             return tags
+        except asyncio.TimeoutError:
+            logger.warning(
+                "[mio_nai] AstrBot Provider LLM 超时，已回退外部 LLM/原描述。"
+            )
+            return ""
         except Exception as exc:
             logger.warning(f"[mio_nai] AstrBot Provider LLM 调用失败，回退外部 LLM: {exc}")
             return ""
