@@ -1,0 +1,10 @@
+name: astrbot_plugin_mio_nai
+author: miofling
+desc: Mio 的 NovelAI 绘图插件（基础/辅助/自动/队列）
+help: |
+  /画图 <描述>
+  /辅助画图 <描述>
+  /画图状态
+  /画图管理 帮助
+version: v0.1.1
+repo: https://github.com/miofling/astrbot_plugin_mio_nai
