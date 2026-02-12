@@ -37,7 +37,7 @@ class DrawTask:
     "astrbot_plugin_mio_nai",
     "miofling",
     "Mio 的 NovelAI 绘图插件（基础/辅助/自动/队列）",
-    "0.2.8",
+    "0.2.9",
     "https://github.com/miofling/astrbot_plugin_mio_nai",
 )
 class MioNaiPlugin(Star):
@@ -180,8 +180,12 @@ class MioNaiPlugin(Star):
     @filter.command("画图")
     async def cmd_draw(self, event: AstrMessageEvent, description: str = ""):
         self._ensure_background_tasks()
-        raw_text = str(getattr(event, "message_str", "") or "")
-        desc = self._extract_command_argument(raw_text, "画图") or (description or "").strip()
+        desc = self._extract_command_argument_from_event(
+            event=event,
+            command_name="画图",
+            fallback=(description or ""),
+            allow_no_space=True,
+        )
         if not desc:
             yield event.plain_result("用法: /画图 描述")
             return
@@ -215,8 +219,12 @@ class MioNaiPlugin(Star):
     @filter.command("辅助画图")
     async def cmd_assist_draw(self, event: AstrMessageEvent, description: str = ""):
         self._ensure_background_tasks()
-        raw_text = str(getattr(event, "message_str", "") or "")
-        desc = self._extract_command_argument(raw_text, "辅助画图") or (description or "").strip()
+        desc = self._extract_command_argument_from_event(
+            event=event,
+            command_name="辅助画图",
+            fallback=(description or ""),
+            allow_no_space=True,
+        )
         if not desc:
             yield event.plain_result("用法: /辅助画图 描述")
             return
@@ -256,7 +264,13 @@ class MioNaiPlugin(Star):
             yield event.plain_result("只有管理员可以修改配置。")
             return
 
-        text = (content or "").strip()
+        text = self._extract_command_argument_from_event(
+            event=event,
+            command_name="画图管理",
+            fallback=(content or ""),
+            allow_no_space=True,
+        )
+        text = self._normalize_manage_text(text)
         if not text or text in {"help", "帮助"}:
             yield event.plain_result(self._manage_help_text())
             return
@@ -540,21 +554,143 @@ class MioNaiPlugin(Star):
             return True
         return False
 
-    def _extract_command_argument(self, raw_text: str, command_name: str) -> str:
+    def _extract_command_argument_from_event(
+        self,
+        event: AstrMessageEvent,
+        command_name: str,
+        fallback: str = "",
+        allow_no_space: bool = False,
+    ) -> str:
+        fallback_text = str(fallback or "").strip()
+        candidates = self._collect_event_text_candidates(event)
+        for candidate in candidates:
+            parsed = self._extract_command_argument(
+                candidate,
+                command_name=command_name,
+                allow_no_space=allow_no_space,
+            )
+            if parsed:
+                return parsed
+        return fallback_text
+
+    def _collect_event_text_candidates(self, event: AstrMessageEvent) -> List[str]:
+        values: List[str] = []
+
+        def add(val: Any) -> None:
+            if not isinstance(val, str):
+                return
+            text = val.strip()
+            if text and text not in values:
+                values.append(text)
+
+        add(getattr(event, "message_str", None))
+
+        msg_obj = getattr(event, "message_obj", None)
+        if msg_obj is not None:
+            for attr in ("message_str", "raw_message", "raw_text", "text", "plain_text"):
+                add(getattr(msg_obj, attr, None))
+
+            message = getattr(msg_obj, "message", None)
+            if isinstance(message, str):
+                add(message)
+            elif isinstance(message, list):
+                parts: List[str] = []
+                for component in message:
+                    comp_text = self._component_to_text(component)
+                    if comp_text:
+                        parts.append(comp_text)
+                if parts:
+                    add("".join(parts))
+                    add(" ".join(parts))
+
+        return values
+
+    def _component_to_text(self, component: Any) -> str:
+        if component is None:
+            return ""
+        if isinstance(component, str):
+            return component
+
+        for attr in ("text", "content", "message", "raw_message"):
+            val = getattr(component, attr, None)
+            if isinstance(val, str) and val.strip():
+                return val
+
+        get_plain_text = getattr(component, "get_plain_text", None)
+        if callable(get_plain_text):
+            try:
+                val = get_plain_text()
+                if isinstance(val, str) and val.strip():
+                    return val
+            except Exception:
+                pass
+
+        return ""
+
+    def _extract_command_argument(
+        self,
+        raw_text: str,
+        command_name: str,
+        allow_no_space: bool = False,
+    ) -> str:
         cleaned = str(raw_text or "")
-        for _ in range(3):
-            new_cleaned = re.sub(r"^\[CQ:[^\]]+\]\s*", "", cleaned, flags=re.IGNORECASE)
-            if new_cleaned == cleaned:
-                break
-            cleaned = new_cleaned
+        cleaned = cleaned.replace("\r\n", "\n").replace("\r", "\n")
+        cleaned = re.sub(r"\[CQ:[^\]]+\]", " ", cleaned, flags=re.IGNORECASE)
         cleaned = cleaned.strip()
         if not cleaned:
             return ""
-        pattern = rf"^[／/]\s*{re.escape(command_name)}(?:\s+(?P<arg>[\s\S]*))?$"
-        match = re.match(pattern, cleaned, flags=re.IGNORECASE)
-        if not match:
+
+        sep_pattern = r"(?:\s*[:：]\s*|\s+)"
+        if allow_no_space:
+            sep_pattern = r"(?:\s*[:：]\s*|\s+|\s*)"
+
+        pattern = rf"[／/]\s*{re.escape(command_name)}{sep_pattern}(?P<arg>[\s\S]*)$"
+        matches = list(re.finditer(pattern, cleaned, flags=re.IGNORECASE))
+        for match in reversed(matches):
+            arg = str(match.group("arg") or "").strip()
+            if command_name == "画图" and arg.startswith(("管理", "状态")):
+                continue
+            return arg
+        return ""
+
+    def _normalize_manage_text(self, text: str) -> str:
+        normalized = re.sub(r"\s+", " ", str(text or "").strip())
+        if not normalized:
             return ""
-        return str(match.group("arg") or "").strip()
+        if " " in normalized:
+            return normalized
+
+        toggle_match = re.match(r"^(自动|回显|opus|请求日志)(开|关)$", normalized, flags=re.IGNORECASE)
+        if toggle_match:
+            return f"{toggle_match.group(1)} {toggle_match.group(2)}"
+
+        mode_match = re.match(r"^(模式)(上下文|随机)$", normalized, flags=re.IGNORECASE)
+        if mode_match:
+            return f"{mode_match.group(1)} {mode_match.group(2)}"
+
+        kv_prefixes = [
+            "正面",
+            "负面",
+            "追加",
+            "文案开始",
+            "文案排队",
+            "基础警告",
+            "llmprovider",
+            "llmurl",
+            "llmkey",
+            "llmmodel",
+            "api",
+            "key",
+            "model",
+        ]
+        lowered = normalized.lower()
+        for prefix in kv_prefixes:
+            if lowered.startswith(prefix.lower()) and len(normalized) > len(prefix):
+                value = normalized[len(prefix) :].lstrip(" :：")
+                if value:
+                    return f"{prefix} {value}"
+
+        return normalized
 
     def _looks_like_tag_prompt(self, text: str) -> bool:
         cleaned = str(text or "").strip()
