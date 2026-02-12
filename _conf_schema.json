@@ -13,6 +13,26 @@
         "type": "bool",
         "default": true
       },
+      "tip_started_template": {
+        "description": "开始生成文案模板（可用 {mode} {pending}）",
+        "type": "string",
+        "default": "{mode}已开始生成。"
+      },
+      "tip_queued_template": {
+        "description": "排队文案模板（可用 {mode} {pending}）",
+        "type": "string",
+        "default": "{mode}已加入队列，前方还有 {pending} 个任务。"
+      },
+      "basic_draw_require_tags": {
+        "description": "基础画图启用标签格式校验",
+        "type": "bool",
+        "default": true
+      },
+      "basic_draw_non_tag_warning": {
+        "description": "基础画图非标签输入时的提示文案",
+        "type": "text",
+        "default": "基础画图只接受标签语言，请使用逗号分隔 tags。例如：1girl, white hair, red eyes, cat ears。自然语言请使用 /辅助画图。"
+      },
       "echo_meta": {
         "description": "回图时附带 seed、耗时与最终 prompt",
         "type": "bool",
@@ -109,6 +129,26 @@
         "description": "绘图请求超时秒数",
         "type": "int",
         "default": 120
+      },
+      "retry_429_enabled": {
+        "description": "命中 429 限流时自动重试",
+        "type": "bool",
+        "default": true
+      },
+      "retry_429_max_attempts": {
+        "description": "429 最大重试次数",
+        "type": "int",
+        "default": 3
+      },
+      "retry_429_base_delay_sec": {
+        "description": "429 重试基础等待秒数（指数退避）",
+        "type": "float",
+        "default": 3.0
+      },
+      "retry_429_max_delay_sec": {
+        "description": "429 重试最大等待秒数",
+        "type": "float",
+        "default": 20.0
       },
       "log_request_payload": {
         "description": "输出 NAI 请求 JSON 到平台日志（调试用）",

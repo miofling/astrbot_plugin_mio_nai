@@ -37,7 +37,7 @@ class DrawTask:
     "astrbot_plugin_mio_nai",
     "miofling",
     "Mio 的 NovelAI 绘图插件（基础/辅助/自动/队列）",
-    "0.2.7",
+    "0.2.8",
     "https://github.com/miofling/astrbot_plugin_mio_nai",
 )
 class MioNaiPlugin(Star):
@@ -89,11 +89,23 @@ class MioNaiPlugin(Star):
             "sampler": "k_euler_ancestral",
             "seed": -1,
             "timeout_sec": 120,
+            "retry_429_enabled": True,
+            "retry_429_max_attempts": 3,
+            "retry_429_base_delay_sec": 3.0,
+            "retry_429_max_delay_sec": 20.0,
             "log_request_payload": False,
             "opus_mode": True,
             "echo_meta": True,
             "send_processing_text": True,
             "enable_assist": True,
+            "basic_draw_require_tags": True,
+            "basic_draw_non_tag_warning": (
+                "基础画图只接受标签语言，请使用逗号分隔 tags。"
+                "例如：1girl, white hair, red eyes, cat ears。"
+                "自然语言请使用 /辅助画图。"
+            ),
+            "tip_started_template": "{mode}已开始生成。",
+            "tip_queued_template": "{mode}已加入队列，前方还有 {pending} 个任务。",
             "bot_names": ["mio", "米欧"],
             "draw_keywords": ["画", "画图", "生图", "绘图", "生成", "来一张", "来张"],
             "whitelist_group_ids": [],
@@ -168,7 +180,8 @@ class MioNaiPlugin(Star):
     @filter.command("画图")
     async def cmd_draw(self, event: AstrMessageEvent, description: str = ""):
         self._ensure_background_tasks()
-        desc = (description or "").strip()
+        raw_text = str(getattr(event, "message_str", "") or "")
+        desc = self._extract_command_argument(raw_text, "画图") or (description or "").strip()
         if not desc:
             yield event.plain_result("用法: /画图 描述")
             return
@@ -177,6 +190,17 @@ class MioNaiPlugin(Star):
         if group_id and not self._is_group_allowed(group_id):
             yield event.plain_result("当前群不在画图白名单中。")
             return
+
+        if self._to_bool(self.state.get("basic_draw_require_tags", True)):
+            if not self._looks_like_tag_prompt(desc):
+                warn = str(self.state.get("basic_draw_non_tag_warning", "")).strip()
+                if not warn:
+                    warn = (
+                        "基础画图只接受标签语言，例如："
+                        "1girl, white hair, red eyes, cat ears。"
+                    )
+                yield event.plain_result(warn)
+                return
 
         pending = await self._enqueue_task(
             event=event,
@@ -191,7 +215,8 @@ class MioNaiPlugin(Star):
     @filter.command("辅助画图")
     async def cmd_assist_draw(self, event: AstrMessageEvent, description: str = ""):
         self._ensure_background_tasks()
-        desc = (description or "").strip()
+        raw_text = str(getattr(event, "message_str", "") or "")
+        desc = self._extract_command_argument(raw_text, "辅助画图") or (description or "").strip()
         if not desc:
             yield event.plain_result("用法: /辅助画图 描述")
             return
@@ -351,6 +376,40 @@ class MioNaiPlugin(Star):
             )
             return
 
+        if cmd in {"文案开始", "tipstart"}:
+            value = text[len(tokens[0]) :].strip()
+            if not value:
+                yield event.plain_result(
+                    "用法: /画图管理 文案开始 <文案>\n支持占位符: {mode}, {pending}"
+                )
+                return
+            self.state["tip_started_template"] = value
+            self._save_runtime_state()
+            yield event.plain_result("开始生成文案已更新。")
+            return
+
+        if cmd in {"文案排队", "tipqueue"}:
+            value = text[len(tokens[0]) :].strip()
+            if not value:
+                yield event.plain_result(
+                    "用法: /画图管理 文案排队 <文案>\n支持占位符: {mode}, {pending}"
+                )
+                return
+            self.state["tip_queued_template"] = value
+            self._save_runtime_state()
+            yield event.plain_result("排队文案已更新。")
+            return
+
+        if cmd in {"基础警告", "tagwarn"}:
+            value = text[len(tokens[0]) :].strip()
+            if not value:
+                yield event.plain_result("用法: /画图管理 基础警告 <提示文案>")
+                return
+            self.state["basic_draw_non_tag_warning"] = value
+            self._save_runtime_state()
+            yield event.plain_result("基础画图警告文案已更新。")
+            return
+
         if cmd in {"llm开", "llmon"}:
             self.state["llm_enable"] = True
             self._save_runtime_state()
@@ -481,6 +540,48 @@ class MioNaiPlugin(Star):
             return True
         return False
 
+    def _extract_command_argument(self, raw_text: str, command_name: str) -> str:
+        cleaned = str(raw_text or "")
+        for _ in range(3):
+            new_cleaned = re.sub(r"^\[CQ:[^\]]+\]\s*", "", cleaned, flags=re.IGNORECASE)
+            if new_cleaned == cleaned:
+                break
+            cleaned = new_cleaned
+        cleaned = cleaned.strip()
+        if not cleaned:
+            return ""
+        pattern = rf"^[／/]\s*{re.escape(command_name)}(?:\s+(?P<arg>[\s\S]*))?$"
+        match = re.match(pattern, cleaned, flags=re.IGNORECASE)
+        if not match:
+            return ""
+        return str(match.group("arg") or "").strip()
+
+    def _looks_like_tag_prompt(self, text: str) -> bool:
+        cleaned = str(text or "").strip()
+        if not cleaned:
+            return False
+        normalized = cleaned.replace("，", ",").replace("；", ",")
+        if re.search(r"[\u4e00-\u9fff]", normalized):
+            return False
+        if re.search(r"[。！？!?]", normalized):
+            return False
+
+        parts = [x.strip() for x in normalized.split(",") if x.strip()]
+        if not parts:
+            return False
+
+        token_pattern = r"[A-Za-z0-9_:\-+./()' ]{1,80}"
+        if len(parts) == 1:
+            token = parts[0]
+            if len(token.split()) > 4:
+                return False
+            return re.fullmatch(token_pattern, token) is not None
+
+        for part in parts:
+            if re.fullmatch(token_pattern, part) is None:
+                return False
+        return True
+
     async def _enqueue_task(
         self,
         event: AstrMessageEvent,
@@ -599,14 +700,50 @@ class MioNaiPlugin(Star):
                 pass
 
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        status, resp_headers, body = await asyncio.to_thread(
-            self._http_post_raw, url, headers, data, timeout
+        retry_429_enabled = self._to_bool(self.state.get("retry_429_enabled", True))
+        retry_429_max_attempts = max(0, int(self.state.get("retry_429_max_attempts", 3)))
+        retry_429_base_delay_sec = max(
+            0.5, float(self.state.get("retry_429_base_delay_sec", 3.0))
         )
-        if status >= 400:
-            raise RuntimeError(f"NAI API 返回 HTTP {status}")
+        retry_429_max_delay_sec = max(
+            retry_429_base_delay_sec,
+            float(self.state.get("retry_429_max_delay_sec", 20.0)),
+        )
 
-        content_type = str(resp_headers.get("Content-Type", "")).lower()
-        return self._extract_image_bytes(body, content_type)
+        attempt = 0
+        while True:
+            try:
+                status, resp_headers, body = await asyncio.to_thread(
+                    self._http_post_raw, url, headers, data, timeout
+                )
+                if status >= 400:
+                    snippet = body[:220].decode("utf-8", errors="ignore")
+                    raise RuntimeError(f"HTTPError {status}: {snippet}")
+            except RuntimeError as exc:
+                err = str(exc)
+                if retry_429_enabled and self._is_http_429_error(err):
+                    if attempt < retry_429_max_attempts:
+                        delay = self._calc_retry_delay(
+                            attempt=attempt,
+                            base_delay=retry_429_base_delay_sec,
+                            max_delay=retry_429_max_delay_sec,
+                        )
+                        attempt += 1
+                        logger.warning(
+                            "[mio_nai] 命中 429，%.2fs 后自动重试 (%s/%s)",
+                            delay,
+                            attempt,
+                            retry_429_max_attempts,
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+                    raise RuntimeError(
+                        f"HTTPError 429: 已重试 {retry_429_max_attempts} 次，仍被限流。"
+                    ) from exc
+                raise
+
+            content_type = str(resp_headers.get("Content-Type", "")).lower()
+            return self._extract_image_bytes(body, content_type)
 
     def _build_nai_payload(self, positive: str, negative: str) -> Tuple[Dict[str, Any], int]:
         configured_seed = int(self.state.get("seed", -1))
@@ -1103,9 +1240,37 @@ class MioNaiPlugin(Star):
         return random.randint(min_m * 60, max_m * 60)
 
     def _queue_tip(self, mode_name: str, pending_before: int) -> str:
+        started_tpl = str(self.state.get("tip_started_template", "")).strip()
+        queued_tpl = str(self.state.get("tip_queued_template", "")).strip()
         if pending_before <= 0:
-            return f"{mode_name}已开始生成。"
-        return f"{mode_name}已加入队列，前方还有 {pending_before} 个任务。"
+            return self._format_tip(
+                template=started_tpl,
+                fallback="{mode}已开始生成。",
+                mode=mode_name,
+                pending=0,
+            )
+        return self._format_tip(
+            template=queued_tpl,
+            fallback="{mode}已加入队列，前方还有 {pending} 个任务。",
+            mode=mode_name,
+            pending=pending_before,
+        )
+
+    def _format_tip(self, template: str, fallback: str, **kwargs: Any) -> str:
+        base = template or fallback
+        try:
+            return base.format(**kwargs)
+        except Exception:
+            return fallback.format(**kwargs)
+
+    def _is_http_429_error(self, error_text: str) -> bool:
+        text = str(error_text or "")
+        return text.startswith("HTTPError 429") or " HTTP 429" in text
+
+    def _calc_retry_delay(self, attempt: int, base_delay: float, max_delay: float) -> float:
+        core = min(max_delay, base_delay * (2**attempt))
+        jitter = random.uniform(0.0, min(1.0, base_delay))
+        return max(0.5, core + jitter)
 
     def _join_tags(self, parts: List[str]) -> str:
         tags: List[str] = []
@@ -1244,6 +1409,8 @@ class MioNaiPlugin(Star):
             "当前配置:\n"
             f"- 模型: {self.state.get('nai_model')}\n"
             f"- NAI URL: {self.state.get('nai_api_url')}\n"
+            f"- 429 重试: {'开' if self._to_bool(self.state.get('retry_429_enabled')) else '关'} "
+            f"(最多 {self.state.get('retry_429_max_attempts')} 次)\n"
             f"- 自动画图: {'开启' if self._to_bool(self.state.get('auto_enabled')) else '关闭'} "
             f"({self.state.get('auto_mode')})\n"
             f"- 自动间隔: {self.state.get('auto_min_minutes')}~{self.state.get('auto_max_minutes')} 分钟\n"
@@ -1251,6 +1418,7 @@ class MioNaiPlugin(Star):
             f"- LLM Provider: {self.state.get('llm_provider_id') or '跟随当前会话'}\n"
             f"- 请求日志: {'开' if self._to_bool(self.state.get('log_request_payload')) else '关'}\n"
             f"- 白名单群: {', '.join(whitelist) if whitelist else '未限制'}\n"
+            f"- 基础画图标签校验: {'开' if self._to_bool(self.state.get('basic_draw_require_tags')) else '关'}\n"
             f"- 回显: {'开' if self._to_bool(self.state.get('echo_meta')) else '关'}"
         )
 
@@ -1269,6 +1437,9 @@ class MioNaiPlugin(Star):
             "/画图管理 回显 开|关\n"
             "/画图管理 opus 开|关\n"
             "/画图管理 请求日志 开|关\n"
+            "/画图管理 文案开始 <文案>\n"
+            "/画图管理 文案排队 <文案>\n"
+            "/画图管理 基础警告 <文案>\n"
             "/画图管理 api <url>\n"
             "/画图管理 key <nai_api_key>\n"
             "/画图管理 model <nai_model>\n"
