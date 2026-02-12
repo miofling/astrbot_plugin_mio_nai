@@ -37,7 +37,7 @@ class DrawTask:
     "astrbot_plugin_mio_nai",
     "miofling",
     "Mio 的 NovelAI 绘图插件（基础/辅助/自动/队列）",
-    "0.2.9",
+    "0.2.10",
     "https://github.com/miofling/astrbot_plugin_mio_nai",
 )
 class MioNaiPlugin(Star):
@@ -571,6 +571,12 @@ class MioNaiPlugin(Star):
             )
             if parsed:
                 return parsed
+        if fallback_text:
+            logger.warning(
+                "[mio_nai] 命令参数回退到框架参数: command=%s fallback=%s",
+                command_name,
+                self._trim_text_for_log(fallback_text, 120),
+            )
         return fallback_text
 
     def _collect_event_text_candidates(self, event: AstrMessageEvent) -> List[str]:
